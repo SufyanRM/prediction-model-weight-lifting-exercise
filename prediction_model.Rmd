@@ -1,14 +1,146 @@
 ---
-title: "Weight Lifting Exercises - Practical Machine Learning Course Project"
+title: "Weight Lifting Exercise - Practical Machine Learning Course Project"
 author: "Sufyan Mughal"
 date: "January 4, 2019"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, cache=TRUE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
 
+## Synopsis
+
+In this report, we aim to develop model for '**Weight Lifting Exercise**' data set and predict **20** different test cases on the developed model using Machine Learning algorithms.
+
+The data set used throughout the report can be downloaded from the links:
+
+1. Training data (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+2. Testing data (https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of **6** participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+More information is available from the website [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
+
+### Goal
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. Our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and **predict the manner** in which they did the exercise. This is the "**classe**" variable in the training set.
+
+* Class A - exactly according to the specification
+* Class B - throwing the elbows to the front
+* Class C - lifting the dumbbell only halfway
+* Class D - lowering the dumbbell only halfway
+* Class E - throwing the hips to the front
+
+## Data Processing
+
+### Loading required packages and data
+
+```{r message=FALSE}
+library(caret)
+
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
 ```
+
+### Exploring data
+
+There are **`r nrow(training)`** observations in our training set and **`r nrow(testing)`** observations in our test set, each containing **`r ncol(training)`** variables.
+
+Looking at the distribution of **classe** variable.
+
+```{r}
+ggplot(training, aes(x = classe)) + geom_bar()
+```
+
+### Cleaning data
+
+Couting **NAs** and **NULL** values for each column of our training set.
+
+```{r}
+sapply(training, function(x) { sum(!(is.na(x) | x == "")) })
+```
+
+There exists many **NAs** in our data set variables, dropping those columns and subsetting the data since first **7** variables are not going to contribute to our prediction model.
+
+```{r}
+# subsetting
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+
+# removig columns with missing values
+training <- training[, colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0] 
+```
+Removing near zero variance predictors
+
+```{r}
+# Check for near zero variance predictors and drop them if necessary
+nzv <- nearZeroVar(training, saveMetrics=TRUE)
+zero.var.ind <- sum(nzv$nzv)
+
+if ((zero.var.ind>0)) {
+        training <- training[,nzv$nzv==FALSE]
+}
+```
+
+Partitioning our training data into  **validation** and **training** set.
+
+```{r}
+set.seed(1337)
+trainData <- createDataPartition(training$classe, p = 0.7, list = FALSE)
+training <- training[trainData, ]
+validation <- training[-trainData, ]
+```
+
+Our data is clean and ready for model training.
+
+## Model training
+
+We will train our model on svm (support vector machine) using caret package.
+
+### SVM
+
+In Support Vector Machine (svm) we plot each data item as a point in n-dimensional space (where n is number of features you have) with the value of each feature being the value of a particular coordinate. Then, we perform classification by finding the hyper-plane that differentiate the two or more classes very well.
+
+```{r}
+TrainCtrl1 <- trainControl(method = "repeatedcv", number = 5, repeats = 5,verbose = FALSE)
+set.seed(31337)
+SVMgrid <- expand.grid(sigma = c(0.0577), C = c(2.21049))
+modelSvmRRB <- train(classe ~ ., method = "svmRadial", trControl = TrainCtrl1,tuneGrid = SVMgrid, preProc = c("scale","YeoJohnson"), verbose = FALSE, data = training)
+```
+
+Our svm model accuracy is **`r modelSvmRRB$results['Accuracy'][[1]]`**
+
+Calculating in-sample error, running model on training set.
+
+```{r}
+svm.train.pred <- predict(modelSvmRRB, training[, -length(names(training))])
+confusionMatrix(svm.train.pred, training$classe)
+```
+
+Calculating out-of-sample error, running model on validation set.
+
+```{r}
+svm.valid.pred <- predict(modelSvmRRB, validation[, -length(names(validation))])
+confusionMatrix(svm.valid.pred, validation$classe)
+```
+
+## Results
+
+We are going to predict our test cases on svm model
+
+```{r}
+svm.test.pred <- predict(modelSvmRRB, testing[, -length(names(testing))])
+svm.test.pred
+```
+
+### Conclusion
+
+There are 20 problems or test cases in 'testing' data set and We have predicted the test cases succesfully with our svm model having **`r modelSvmRRB$results['Accuracy'][[1]]`** accuracy. SVM with radial kernel is a strong machine learning algorithm and in our case, we have evidently seen that.
+
+<br>
+<br>
